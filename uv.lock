@@ -159,6 +159,7 @@ dependencies = [
     { name = "django-environ" },
     { name = "djangorestframework" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "redis" },
 ]
 
 [package.metadata]
@@ -168,6 +169,7 @@ requires-dist = [
     { name = "django-environ", specifier = ">=0.12.0" },
     { name = "djangorestframework", specifier = ">=3.16.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.12" },
+    { name = "redis", specifier = ">=5.2.1" },
 ]
 
 [[package]]
