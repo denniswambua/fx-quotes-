@@ -1,0 +1,38 @@
+[
+  {
+    "model": "app.currency",
+    "pk": "USD",
+    "fields": {
+      "currency_name": "US Dollar",
+      "decimal_places": 4,
+      "enabled": true
+    }
+  },
+  {
+    "model": "app.currency",
+    "pk": "EUR",
+    "fields": {
+      "currency_name": "Euro",
+      "decimal_places": 4,
+      "enabled": true
+    }
+  },
+  {
+    "model": "app.currency",
+    "pk": "KES",
+    "fields": {
+      "currency_name": "Kenyan Shilling",
+      "decimal_places": 4,
+      "enabled": true
+    }
+  },
+  {
+    "model": "app.currency",
+    "pk": "NGN",
+    "fields": {
+      "currency_name": "Nigerian Naira",
+      "decimal_places": 4,
+      "enabled": true
+    }
+  }
+]

@@ -25,7 +25,7 @@ from app.viewsets import CurrencyViewSet, RateViewSet, QuoteViewSet, Transaction
 router = routers.SimpleRouter()
 router.register(r"api/currencies", CurrencyViewSet)
 router.register(r"api/rates", RateViewSet)
-router.register(r"api/qoutes", QuoteViewSet)
+router.register(r"api/quotes", QuoteViewSet)
 router.register(r"api/transactions", TransactionViewSet)
 
 urlpatterns = [

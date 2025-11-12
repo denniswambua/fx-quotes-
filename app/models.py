@@ -1,6 +1,7 @@
 from datetime import timedelta
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 class Currency(models.Model):
@@ -41,6 +42,9 @@ class Quote(models.Model):
     expiry_timestamp = models.DateTimeField()
 
     def save(self, *args, **kwargs):
+        if not self.timestamp:
+            self.timestamp = timezone.now()
+
         self.expiry_timestamp = self.timestamp + timedelta(
             seconds=settings.QUOTES_EXPIRY_SECONDS
         )

@@ -1,0 +1,97 @@
+from datetime import timedelta
+
+from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from app.models import Currency, Quote
+
+
+class QuoteViewSetTests(APITestCase):
+    def setUp(self):
+        self.from_currency = Currency.objects.create(
+            currency_code="USD", currency_name="US Dollar", decimal_places=2
+        )
+        self.to_currency = Currency.objects.create(
+            currency_code="EUR", currency_name="Euro", decimal_places=2
+        )
+        self.list_url = reverse("quote-list")
+
+    def _detail_url(self, pk: int) -> str:
+        return reverse("quote-detail", args=[pk])
+
+    def test_create_quote(self):
+        payload = {
+            "from_currency": self.from_currency.currency_code,
+            "to_currency": self.to_currency.currency_code,
+            "amount": "100.0000",
+        }
+
+        response = self.client.post(self.list_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        quote = Quote.objects.get(pk=response.data["id"])
+        self.assertEqual(str(quote.amount), "100.0000")
+        self.assertEqual(quote.from_currency, self.from_currency)
+        self.assertEqual(quote.to_currency, self.to_currency)
+        self.assertTrue(
+            quote.expiry_timestamp - quote.timestamp
+            < timedelta(seconds=settings.QUOTES_EXPIRY_SECONDS),
+        )
+
+    def test_list_quotes(self):
+        Quote.objects.create(
+            from_currency=self.from_currency,
+            to_currency=self.to_currency,
+            amount="100.0000",
+        )
+        Quote.objects.create(
+            from_currency=self.to_currency,
+            to_currency=self.from_currency,
+            amount="200.0000",
+        )
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+
+    def test_retrieve_quote(self):
+        quote = Quote.objects.create(
+            from_currency=self.from_currency,
+            to_currency=self.to_currency,
+            amount="100.0000",
+        )
+
+        response = self.client.get(self._detail_url(quote.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["amount"], "100.0000")
+
+    def test_update_quote(self):
+        quote = Quote.objects.create(
+            from_currency=self.from_currency,
+            to_currency=self.to_currency,
+            amount="100.0000",
+        )
+
+        response = self.client.patch(
+            self._detail_url(quote.pk), {"amount": "250.0000"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        quote.refresh_from_db()
+        self.assertEqual(str(quote.amount), "250.0000")
+
+    def test_delete_quote(self):
+        quote = Quote.objects.create(
+            from_currency=self.from_currency,
+            to_currency=self.to_currency,
+            amount="100.0000",
+        )
+
+        response = self.client.delete(self._detail_url(quote.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Quote.objects.filter(pk=quote.pk).exists())
