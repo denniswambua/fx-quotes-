@@ -25,7 +25,7 @@ class Rate(models.Model):
     timestamp = models.DateTimeField()
 
 
-class Qoute(models.Model):
+class Quote(models.Model):
     from_currency = models.ForeignKey(
         Currency,
         related_name="%(app_label)s_%(class)s_from_related",
@@ -57,7 +57,7 @@ class Transaction(models.Model):
         (SUCCESS, "Success"),
         (EXPIRED, "Expired"),
     ]
-    quote = models.ForeignKey(Qoute, on_delete=models.RESTRICT)
+    quote = models.ForeignKey(Quote, on_delete=models.RESTRICT)
     state = models.CharField(max_length=255, choices=TRANSACTION_STATE, default=PENDING)
     amount = models.DecimalField(max_digits=10, decimal_places=4)
     timestamp = models.DateTimeField(auto_now_add=True)
