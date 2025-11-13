@@ -22,9 +22,8 @@ class CurrencyViewSetTests(APITestCase):
 
         response = self.client.post(self.list_url, payload, format="json")
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(Currency.objects.filter(currency_code="USD").exists())
-        self.assertEqual(response.data["currency_name"], "US Dollar")
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertFalse(Currency.objects.filter(currency_code="USD").exists())
 
     def test_list_currencies(self):
         Currency.objects.create(
@@ -68,12 +67,12 @@ class CurrencyViewSetTests(APITestCase):
 
         response = self.client.put(self._detail_url("USD"), payload, format="json")
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
         currency = Currency.objects.get(currency_code="USD")
-        self.assertEqual(currency.currency_name, "United States Dollar")
-        self.assertEqual(currency.decimal_places, 4)
-        self.assertFalse(currency.enabled)
+        self.assertNotEqual(currency.currency_name, "United States Dollar")
+        self.assertEqual(currency.decimal_places, 2)
+        self.assertTrue(currency.enabled)
 
     def test_delete_currency(self):
         Currency.objects.create(
@@ -82,5 +81,5 @@ class CurrencyViewSetTests(APITestCase):
 
         response = self.client.delete(self._detail_url("USD"))
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Currency.objects.filter(currency_code="USD").exists())
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Currency.objects.filter(currency_code="USD").exists())

@@ -154,9 +154,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Celery configuration
 CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default="redis://cache:6379/0")
-CELERY_RESULT_BACKEND = env.str(
-    "CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL
-)
+CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -165,7 +163,7 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
     "fetch-latest-exchange-rates": {
         "task": "app.tasks.fetch_latest_exchange_rates",
-        "schedule": crontab(minute="*/5"),
+        "schedule": crontab(minute="*/30"),
     }
 }
 
@@ -175,7 +173,5 @@ EXCHANGE_RATES_API_URL = env.str(
     "EXCHANGE_RATES_API_URL", default="https://api.exchangeratesapi.io/v1/latest"
 )
 EXCHANGE_RATES_API_KEY = env.str("EXCHANGE_RATES_API_KEY", default="")
-EXCHANGE_RATES_BASE_CURRENCY = env.str(
-    "EXCHANGE_RATES_BASE_CURRENCY", default="USD"
-)
+EXCHANGE_RATES_BASE_CURRENCY = env.str("EXCHANGE_RATES_BASE_CURRENCY", default="EUR")
 EXCHANGE_RATES_API_TIMEOUT = env.float("EXCHANGE_RATES_API_TIMEOUT", default=10.0)

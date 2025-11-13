@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from app.models import Currency, Rate
 from app.tasks import fetch_latest_exchange_rates
@@ -15,23 +15,26 @@ class FetchLatestExchangeRatesTaskTests(TestCase):
         self.base_currency = Currency.objects.create(
             currency_code=self.base_currency_code,
             currency_name="Base Currency",
-            decimal_places=2,
+            decimal_places=4,
             enabled=True,
         )
         self.target_currency = Currency.objects.create(
-            currency_code="EUR",
-            currency_name="Euro",
-            decimal_places=2,
+            currency_code="USD",
+            currency_name="US Dollar",
+            decimal_places=4,
             enabled=True,
         )
 
+    @override_settings(CELERY_ALWAYS_EAGER=True)
     @patch("app.tasks._fetch_payload")
-    def test_fetch_latest_exchange_rates_updates_rates_with_mocked_api(self, mock_fetch_payload):
+    def test_fetch_latest_exchange_rates_updates_rates_with_mocked_api(
+        self, mock_fetch_payload
+    ):
         timestamp_value = 1_700_000_000
         mock_fetch_payload.return_value = {
             "timestamp": timestamp_value,
             "rates": {
-                "EUR": "0.8500",
+                "USD": "0.8500",
                 "JPY": "110.0000",
             },
         }
@@ -41,7 +44,7 @@ class FetchLatestExchangeRatesTaskTests(TestCase):
         mock_fetch_payload.assert_called_once()
         called_url = mock_fetch_payload.call_args.args[0]
         self.assertIn(f"base={self.base_currency_code}", called_url)
-        self.assertIn("symbols=EUR", called_url)
+        self.assertIn("symbols=USD", called_url)
 
         rate = Rate.objects.get(
             base_currency=self.base_currency,

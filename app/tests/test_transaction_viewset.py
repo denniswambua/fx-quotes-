@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -61,14 +64,34 @@ class TransactionViewSetTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         transaction.refresh_from_db()
-        self.assertEqual(transaction.state, Transaction.SUCCESS)
+        self.assertNotEqual(transaction.state, Transaction.SUCCESS)
 
     def test_delete_transaction(self):
         transaction = Transaction.objects.create(quote=self.quote, amount="100.0000")
 
         response = self.client.delete(self._detail_url(transaction.pk))
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Transaction.objects.filter(pk=transaction.pk).exists())
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Transaction.objects.filter(pk=transaction.pk).exists())
+
+    def test_create_transaction_with_expired_quote(self):
+        self.quote.timestamp = timezone.now() - timedelta(
+            seconds=settings.QUOTES_EXPIRY_SECONDS + 1
+        )
+        self.quote.expiry_timestamp = self.quote.timestamp + timedelta(
+            seconds=settings.QUOTES_EXPIRY_SECONDS
+        )
+        self.quote.save(update_fields=["timestamp", "expiry_timestamp"])
+
+        payload = {
+            "quote": self.quote.pk,
+            "amount": "100.0000",
+        }
+
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("quote", response.data)
+        self.assertEqual(response.data["quote"][0], "Quote has expired.")

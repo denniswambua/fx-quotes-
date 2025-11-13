@@ -45,9 +45,13 @@ def _deserialize_timestamp(payload: Dict) -> datetime:
     if date_value:
         try:
             naive_date = datetime.strptime(date_value, "%Y-%m-%d")
-            return timezone.make_aware(naive_date, timezone=timezone.get_default_timezone())
+            return timezone.make_aware(
+                naive_date, timezone=timezone.get_default_timezone()
+            )
         except ValueError:
-            logger.warning("Unable to parse date '%s' from exchange rates payload", date_value)
+            logger.warning(
+                "Unable to parse date '%s' from exchange rates payload", date_value
+            )
 
     return timezone.now()
 
@@ -57,13 +61,19 @@ def _fetch_payload(url: str) -> Dict:
 
     with urlopen(request, timeout=settings.EXCHANGE_RATES_API_TIMEOUT) as response:
         if response.status != 200:
-            raise HTTPError(url, response.status, response.reason, response.headers, None)
+            raise HTTPError(
+                url, response.status, response.reason, response.headers, None
+            )
         payload_bytes = response.read()
 
     payload = json.loads(payload_bytes.decode("utf-8"))
 
     if payload.get("error"):
-        error_message = payload["error"].get("message") if isinstance(payload["error"], dict) else payload["error"]
+        error_message = (
+            payload["error"].get("message")
+            if isinstance(payload["error"], dict)
+            else payload["error"]
+        )
         raise ValueError(f"Exchange rates API error: {error_message}")
 
     return payload
@@ -80,7 +90,9 @@ def fetch_latest_exchange_rates(self):
     base_currency_code = settings.EXCHANGE_RATES_BASE_CURRENCY.upper()
 
     try:
-        base_currency = Currency.objects.get(currency_code=base_currency_code, enabled=True)
+        base_currency = Currency.objects.get(
+            currency_code=base_currency_code, enabled=True
+        )
     except Currency.DoesNotExist:
         logger.warning(
             "Base currency %s is not configured or not enabled; skipping rates fetch",
@@ -99,7 +111,9 @@ def fetch_latest_exchange_rates(self):
         logger.info("No enabled target currencies configured; nothing to update")
         return
 
-    request_url = _build_request_url(base_currency_code, list(target_currency_map.keys()))
+    request_url = _build_request_url(
+        base_currency_code, list(target_currency_map.keys())
+    )
 
     try:
         payload = _fetch_payload(request_url)
@@ -140,5 +154,7 @@ def fetch_latest_exchange_rates(self):
             )
 
     logger.info(
-        "Exchange rates refreshed for base %s at %s", base_currency_code, fetched_at.isoformat()
+        "Exchange rates refreshed for base %s at %s",
+        base_currency_code,
+        fetched_at.isoformat(),
     )

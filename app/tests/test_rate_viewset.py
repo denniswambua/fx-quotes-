@@ -29,8 +29,8 @@ class RateViewSetTests(APITestCase):
 
         response = self.client.post(self.list_url, payload, format="json")
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertFalse(
             Rate.objects.filter(
                 base_currency=self.base_currency,
                 target_currency=self.target_currency,
@@ -81,9 +81,9 @@ class RateViewSetTests(APITestCase):
             self._detail_url(rate.pk), {"rate": "1.1500"}, format="json"
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         rate.refresh_from_db()
-        self.assertEqual(str(rate.rate), "1.1500")
+        self.assertNotEqual(str(rate.rate), "1.1500")
 
     def test_delete_rate(self):
         rate = Rate.objects.create(
@@ -95,5 +95,5 @@ class RateViewSetTests(APITestCase):
 
         response = self.client.delete(self._detail_url(rate.pk))
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Rate.objects.filter(pk=rate.pk).exists())
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Rate.objects.filter(pk=rate.pk).exists())
