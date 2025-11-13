@@ -38,10 +38,13 @@ class QuoteViewSetTests(APITestCase):
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["amount"], "85.0000")
+        self.assertIn("rate", response.data)
+        self.assertEqual(response.data["rate"], "0.8500")
         self.assertIn("timestamp", response.data)
         self.assertIn("expiry_timestamp", response.data)
         quote = Quote.objects.get(pk=response.data["id"])
         self.assertEqual(str(quote.amount), "85.0000")
+        self.assertEqual(str(quote.rate), "0.8500")
         self.assertEqual(quote.from_currency, self.from_currency)
         self.assertEqual(quote.to_currency, self.to_currency)
         self.assertTrue(

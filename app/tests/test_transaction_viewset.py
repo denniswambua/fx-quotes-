@@ -60,13 +60,13 @@ class TransactionViewSetTests(APITestCase):
 
         response = self.client.patch(
             self._detail_url(transaction.pk),
-            {"state": Transaction.SUCCESS},
+            {"amount": "120.0000"},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         transaction.refresh_from_db()
-        self.assertNotEqual(transaction.state, Transaction.SUCCESS)
+        self.assertEqual(str(transaction.amount), "100.0000")
 
     def test_delete_transaction(self):
         transaction = Transaction.objects.create(quote=self.quote, amount="100.0000")

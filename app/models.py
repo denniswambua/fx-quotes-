@@ -38,6 +38,12 @@ class Quote(models.Model):
         on_delete=models.RESTRICT,
     )
     amount = models.DecimalField(max_digits=10, decimal_places=4)
+    rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+    )
     timestamp = models.DateTimeField(auto_now_add=True)
     expiry_timestamp = models.DateTimeField()
 
@@ -52,17 +58,15 @@ class Quote(models.Model):
 
 
 class Transaction(models.Model):
-    PENDING = "PENDING"
-    SUCCESS = "SUCCESS"
-    EXPIRED = "EXPIRED"
-
-    TRANSACTION_STATE = [
-        (PENDING, "Created"),
-        (SUCCESS, "Success"),
-        (EXPIRED, "Expired"),
-    ]
     quote = models.ForeignKey(Quote, on_delete=models.RESTRICT)
-    state = models.CharField(max_length=255, choices=TRANSACTION_STATE, default=PENDING)
     amount = models.DecimalField(max_digits=10, decimal_places=4)
     timestamp = models.DateTimeField(auto_now_add=True)
     update_timestamp = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["quote", "amount"],
+                name="unique_transaction_quote_amount",
+            )
+        ]

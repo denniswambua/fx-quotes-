@@ -14,6 +14,16 @@ def _quantize(value: Decimal, decimal_places: int) -> Decimal:
     return value.quantize(exponent, rounding=ROUND_HALF_UP)
 
 
+def _quantize_rate(value: Decimal) -> Decimal:
+    rate_decimal_places = Rate._meta.get_field("rate").decimal_places or 0
+    exponent = (
+        Decimal("1").scaleb(-rate_decimal_places)
+        if rate_decimal_places
+        else Decimal("1")
+    )
+    return value.quantize(exponent, rounding=ROUND_HALF_UP)
+
+
 def _latest_rate(base_currency: Currency, target_currency: Currency):
     """Fetch the most recent rate between two currencies, if available."""
     return (
@@ -27,6 +37,8 @@ def convert_currency(
     amount: Union[str, float, int, Decimal],
     from_currency_code: str,
     to_currency_code: str,
+    *,
+    return_rate: bool = False,
 ) -> Decimal:
     """Convert an amount between currencies using direct, inverse, or base rates."""
     if not from_currency_code or not to_currency_code:
@@ -51,12 +63,18 @@ def convert_currency(
         raise ValueError(f"Currency '{to_code}' does not exist") from exc
 
     if from_currency == to_currency:
-        return _quantize(amount_decimal, to_currency.decimal_places)
+        quantized = _quantize(amount_decimal, to_currency.decimal_places)
+        if return_rate:
+            return quantized, _quantize_rate(Decimal("1"))
+        return quantized
 
     direct_rate = _latest_rate(from_currency, to_currency)
     if direct_rate:
         converted = amount_decimal * direct_rate.rate
-        return _quantize(converted, to_currency.decimal_places)
+        quantized = _quantize(converted, to_currency.decimal_places)
+        if return_rate:
+            return quantized, _quantize_rate(direct_rate.rate)
+        return quantized
 
     inverse_rate = _latest_rate(to_currency, from_currency)
     if inverse_rate:
@@ -65,7 +83,11 @@ def convert_currency(
                 f"Rate between '{from_code}' and '{to_code}' is zero; cannot convert"
             )
         converted = amount_decimal / inverse_rate.rate
-        return _quantize(converted, to_currency.decimal_places)
+        quantized = _quantize(converted, to_currency.decimal_places)
+        if return_rate:
+            inverse_value = Decimal("1") / inverse_rate.rate
+            return quantized, _quantize_rate(inverse_value)
+        return quantized
 
     base_code = settings.EXCHANGE_RATES_BASE_CURRENCY.upper()
     if not base_code:
@@ -77,16 +99,22 @@ def convert_currency(
         raise ValueError(f"Base currency '{base_code}' does not exist") from exc
 
     amount_in_base = amount_decimal
+    effective_rate = Decimal("1")
     if from_currency != base_currency:
         base_to_from = _latest_rate(base_currency, from_currency)
         if not base_to_from or base_to_from.rate == 0:
             raise ValueError(
                 f"Missing rate to convert '{from_code}' to base currency '{base_code}'"
             )
-        amount_in_base = amount_decimal / base_to_from.rate
+        rate_to_base = Decimal("1") / base_to_from.rate
+        amount_in_base = amount_decimal * rate_to_base
+        effective_rate = rate_to_base
 
     if to_currency == base_currency:
-        return _quantize(amount_in_base, to_currency.decimal_places)
+        quantized = _quantize(amount_in_base, to_currency.decimal_places)
+        if return_rate:
+            return quantized, _quantize_rate(effective_rate)
+        return quantized
 
     base_to_target = _latest_rate(base_currency, to_currency)
     if not base_to_target:
@@ -95,4 +123,8 @@ def convert_currency(
         )
 
     converted = amount_in_base * base_to_target.rate
-    return _quantize(converted, to_currency.decimal_places)
+    quantized = _quantize(converted, to_currency.decimal_places)
+    if return_rate:
+        total_rate = effective_rate * base_to_target.rate
+        return quantized, _quantize_rate(total_rate)
+    return quantized
