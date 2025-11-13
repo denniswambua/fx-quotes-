@@ -29,6 +29,32 @@ services:
     restart: always
 
 
+  celery-worker:
+    build: .
+    command: uv run celery -A app worker --loglevel=info
+    volumes:
+      - ./:/app/
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - cache
+    restart: always
+
+
+  celery-beat:
+    build: .
+    command: uv run celery -A app beat --loglevel=info
+    volumes:
+      - ./:/app/
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - cache
+    restart: always
+
+
   cache: 
     image: redis:8.2
     restart: always
