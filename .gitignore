@@ -9,5 +9,7 @@ wheels/
 db.sqlite3
 .coverage
 celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
 # Virtual environments
 .venv

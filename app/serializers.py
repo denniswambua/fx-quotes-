@@ -74,15 +74,15 @@ class TransactionSerializer(serializers.ModelSerializer):
                     }
                 )
 
-        if self.instance is None and quote and amount:
-            if Transaction.objects.filter(quote=quote, amount=amount).exists():
-                raise serializers.ValidationError(
-                    {
-                        "non_field_errors": [
-                            "A transaction for this quote and amount already exists."
-                        ]
-                    }
-                )
+        # if self.instance is None and quote and amount:
+        #    if Transaction.objects.filter(quote=quote, amount=amount).exists():
+        #        raise serializers.ValidationError(
+        #            {
+        #                "non_field_errors": [
+        #                    "A transaction for this quote and amount already exists."
+        #                ]
+        #            }
+        #        )
         return attrs
 
     def create(self, validated_data):

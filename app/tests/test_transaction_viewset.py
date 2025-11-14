@@ -117,3 +117,12 @@ class TransactionViewSetTests(APITestCase):
             response.data["amount"][0],
             "Transaction amount must match the original quoted amount.",
         )
+
+    def test_create_duplicate_transaction(self):
+        payload = {"quote": self.quote.pk, "amount": 100.00}
+        response = self.client.post(self.list_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Transaction.objects.filter(pk=response.data["id"]).exists())
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
