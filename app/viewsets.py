@@ -46,4 +46,4 @@ class TransactionViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = TransactionSerializer
-    queryset = Transaction.objects.all()
+    queryset = Transaction.objects.select_related()

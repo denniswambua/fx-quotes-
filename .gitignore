@@ -7,5 +7,7 @@ wheels/
 *.egg-info
 .env
 db.sqlite3
+.coverage
+celerybeat-schedule
 # Virtual environments
 .venv

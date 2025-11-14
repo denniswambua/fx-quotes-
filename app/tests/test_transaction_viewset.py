@@ -20,6 +20,7 @@ class TransactionViewSetTests(APITestCase):
         self.quote = Quote.objects.create(
             from_currency=self.from_currency,
             to_currency=self.to_currency,
+            converted_amount="100.0000",
             amount="100.0000",
         )
         self.list_url = reverse("transaction-list")
@@ -39,8 +40,14 @@ class TransactionViewSetTests(APITestCase):
         self.assertTrue(Transaction.objects.filter(pk=response.data["id"]).exists())
 
     def test_list_transactions(self):
+        other_quote = Quote.objects.create(
+            from_currency=self.from_currency,
+            to_currency=self.to_currency,
+            converted_amount="150.0000",
+            amount="150.0000",
+        )
         Transaction.objects.create(quote=self.quote, amount="100.0000")
-        Transaction.objects.create(quote=self.quote, amount="150.0000")
+        Transaction.objects.create(quote=other_quote, amount="150.0000")
 
         response = self.client.get(self.list_url)
 
@@ -95,3 +102,18 @@ class TransactionViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("quote", response.data)
         self.assertEqual(response.data["quote"][0], "Quote has expired.")
+
+    def test_create_transaction_with_amount_mismatch(self):
+        payload = {
+            "quote": self.quote.pk,
+            "amount": "150.0000",
+        }
+
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)
+        self.assertEqual(
+            response.data["amount"][0],
+            "Transaction amount must match the original quoted amount.",
+        )

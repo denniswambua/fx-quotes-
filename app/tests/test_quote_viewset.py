@@ -37,13 +37,16 @@ class QuoteViewSetTests(APITestCase):
 
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["amount"], "85.0000")
+        self.assertEqual(response.data["amount"], "100.0000")
+        self.assertIn("converted_amount", response.data)
+        self.assertEqual(response.data["converted_amount"], "85.0000")
         self.assertIn("rate", response.data)
         self.assertEqual(response.data["rate"], "0.8500")
         self.assertIn("timestamp", response.data)
         self.assertIn("expiry_timestamp", response.data)
         quote = Quote.objects.get(pk=response.data["id"])
-        self.assertEqual(str(quote.amount), "85.0000")
+        self.assertEqual(str(quote.amount), "100.0000")
+        self.assertEqual(str(quote.converted_amount), "85.0000")
         self.assertEqual(str(quote.rate), "0.8500")
         self.assertEqual(quote.from_currency, self.from_currency)
         self.assertEqual(quote.to_currency, self.to_currency)
@@ -72,11 +75,13 @@ class QuoteViewSetTests(APITestCase):
         Quote.objects.create(
             from_currency=self.from_currency,
             to_currency=self.to_currency,
+            converted_amount="100.0000",
             amount="100.0000",
         )
         Quote.objects.create(
             from_currency=self.to_currency,
             to_currency=self.from_currency,
+            converted_amount="200.0000",
             amount="200.0000",
         )
 
@@ -89,6 +94,7 @@ class QuoteViewSetTests(APITestCase):
         quote = Quote.objects.create(
             from_currency=self.from_currency,
             to_currency=self.to_currency,
+            converted_amount="100.0000",
             amount="100.0000",
         )
 
@@ -96,11 +102,13 @@ class QuoteViewSetTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["amount"], "100.0000")
+        self.assertEqual(response.data["converted_amount"], "100.0000")
 
     def test_update_quote(self):
         quote = Quote.objects.create(
             from_currency=self.from_currency,
             to_currency=self.to_currency,
+            converted_amount="100.0000",
             amount="100.0000",
         )
 
@@ -116,6 +124,7 @@ class QuoteViewSetTests(APITestCase):
         quote = Quote.objects.create(
             from_currency=self.from_currency,
             to_currency=self.to_currency,
+            converted_amount="100.0000",
             amount="100.0000",
         )
 

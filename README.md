@@ -1,7 +1,7 @@
 # FX-Quotes
 Foreign exchange micro service in python/django.
 
-Support the following currencies:
+Supports the following currencies:
 - USD
 - EUR
 - KES
@@ -34,4 +34,5 @@ docker-compose exec web uv run manage.py loaddata app/fixture/currencies.json
 
 ## Design approach and key decisions
 ## Known limitations
+- No historical rate data
 ## Any assumptions you made

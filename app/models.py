@@ -37,6 +37,9 @@ class Quote(models.Model):
         related_name="%(app_label)s_%(class)s_to_related",
         on_delete=models.RESTRICT,
     )
+    converted_amount = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True
+    )
     amount = models.DecimalField(max_digits=10, decimal_places=4)
     rate = models.DecimalField(
         max_digits=10,
