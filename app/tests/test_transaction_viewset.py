@@ -34,10 +34,14 @@ class TransactionViewSetTests(APITestCase):
             "amount": "100.0000",
         }
 
-        response = self.client.post(self.list_url, payload, format="json")
+        with self.assertLogs("app.serializers", level="INFO") as captured:
+            response = self.client.post(self.list_url, payload, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Transaction.objects.filter(pk=response.data["id"]).exists())
+        self.assertTrue(
+            any("Transaction created" in message for message in captured.output)
+        )
 
     def test_list_transactions(self):
         other_quote = Quote.objects.create(
@@ -98,11 +102,15 @@ class TransactionViewSetTests(APITestCase):
             "amount": "100.0000",
         }
 
-        response = self.client.post(self.list_url, payload, format="json")
+        with self.assertLogs("app.serializers", level="WARNING") as captured:
+            response = self.client.post(self.list_url, payload, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("quote", response.data)
         self.assertEqual(response.data["quote"][0], "Quote has expired.")
+        self.assertTrue(
+            any("Attempted transaction on expired quote" in message for message in captured.output)
+        )
 
     def test_create_transaction_with_amount_mismatch(self):
         payload = {
@@ -124,7 +132,11 @@ class TransactionViewSetTests(APITestCase):
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Transaction.objects.filter(pk=response.data["id"]).exists())
-        response = self.client.post(self.list_url, payload, format="json")
+        with self.assertLogs("app.serializers", level="WARNING") as captured:
+            response = self.client.post(self.list_url, payload, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("non_field_errors", response.data)
+        self.assertTrue(
+            any("Duplicate transaction detected" in message for message in captured.output)
+        )

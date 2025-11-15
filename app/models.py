@@ -1,6 +1,9 @@
 from datetime import timedelta
-from django.db import models
 from django.conf import settings
+from django.core.cache import cache
+from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -28,6 +31,17 @@ class Rate(models.Model):
 
     class Meta:
         ordering = ["-update_timestamp", "-timestamp"]
+
+
+@receiver(post_save, sender=Rate)
+def update_rate_cache(sender, instance: Rate, **_kwargs):
+    cache_key = f"rate_{instance.base_currency.currency_code}_{instance.target_currency.currency_code}"
+    cache_payload = {
+        "rate": instance.rate,
+        "timestamp": instance.timestamp,
+        "update_timestamp": instance.update_timestamp,
+    }
+    cache.set(cache_key, cache_payload, settings.EXCHANGE_RATES_EXPIRY_SECONDS)
 
 
 class Quote(models.Model):

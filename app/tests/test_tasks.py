@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
@@ -12,6 +13,7 @@ from app.tasks import _deserialize_timestamp, fetch_latest_exchange_rates
 
 class FetchLatestExchangeRatesTaskTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.base_currency_code = settings.EXCHANGE_RATES_BASE_CURRENCY.upper()
         self.base_currency = Currency.objects.create(
             currency_code=self.base_currency_code,
@@ -40,7 +42,8 @@ class FetchLatestExchangeRatesTaskTests(TestCase):
             },
         }
 
-        fetch_latest_exchange_rates.run()
+        with self.assertLogs("app.tasks", level="INFO") as captured:
+            fetch_latest_exchange_rates.run()
 
         mock_fetch_payload.assert_called_once()
         called_url = mock_fetch_payload.call_args.args[0]
@@ -59,6 +62,12 @@ class FetchLatestExchangeRatesTaskTests(TestCase):
         self.assertFalse(
             Rate.objects.filter(target_currency__currency_code="JPY").exists()
         )
+        self.assertTrue(
+            any("Rate updated" in message for message in captured.output)
+        )
+
+    def tearDown(self):
+        cache.clear()
 
 
 class DeserializeTimestampTests(SimpleTestCase):

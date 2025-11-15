@@ -36,7 +36,8 @@ class QuoteViewSetTests(APITestCase):
             "amount": "100.0000",
         }
 
-        response = self.client.post(self.list_url, payload, format="json")
+        with self.assertLogs("app.serializers", level="INFO") as captured:
+            response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["amount"], "100.0000")
         self.assertIn("converted_amount", response.data)
@@ -54,6 +55,9 @@ class QuoteViewSetTests(APITestCase):
         self.assertTrue(
             quote.expiry_timestamp - quote.timestamp
             < timedelta(seconds=settings.QUOTES_EXPIRY_SECONDS),
+        )
+        self.assertTrue(
+            any("Quote created" in message for message in captured.output)
         )
 
     def test_create_quote_without_available_rate(self):

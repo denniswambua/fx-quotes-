@@ -43,6 +43,17 @@ class CurrencyConversionUtilsTests(TestCase):
             rate=Decimal("0.8000"),
             timestamp=now,
         )
+        self.kes = Currency.objects.create(
+            currency_code="KES",
+            currency_name="Kenyan Shilling",
+            decimal_places=4,
+        )
+        Rate.objects.create(
+            base_currency=self.base_currency,
+            target_currency=self.kes,
+            rate=Decimal("150.3223"),
+            timestamp=now,
+        )
 
     def test_converts_with_direct_rate(self):
         result = convert_currency(Decimal("100"), self.base_code, "USD")
@@ -77,6 +88,9 @@ class CurrencyConversionUtilsTests(TestCase):
         Rate.objects.filter(
             base_currency=self.base_currency, target_currency=self.usd
         ).update(timestamp=stale_timestamp, update_timestamp=stale_timestamp)
+        cache.delete(
+            f"rate_{self.base_currency.currency_code}_{self.usd.currency_code}"
+        )
 
         with self.assertRaisesRegex(ValueError, "stale"):
             convert_currency(Decimal("100"), self.base_code, "USD")
@@ -93,6 +107,43 @@ class CurrencyConversionUtilsTests(TestCase):
         Rate.objects.filter(
             base_currency=self.base_currency, target_currency=self.gbp
         ).update(timestamp=stale_timestamp, update_timestamp=stale_timestamp)
+        cache.delete(
+            f"rate_{self.base_currency.currency_code}_{self.usd.currency_code}"
+        )
+        cache.delete(
+            f"rate_{self.base_currency.currency_code}_{self.gbp.currency_code}"
+        )
 
         with self.assertRaisesRegex(ValueError, "stale"):
             convert_currency(Decimal("90"), "USD", "GBP")
+
+    def test_converts_kes_to_usd_via_eur(self):
+        Rate.objects.create(
+            base_currency=self.base_currency,
+            target_currency=self.usd,
+            rate=Decimal("1.1627"),
+            timestamp=timezone.now(),
+        )
+
+        cache.clear()
+        result = convert_currency(Decimal("100000"), "KES", "USD")
+
+        self.assertEqual(result, Decimal("773.4714"))
+
+    def test_rate_post_save_refreshes_cache(self):
+        cache_key = (
+            f"rate_{self.base_currency.currency_code}_{self.usd.currency_code}"
+        )
+        cache.delete(cache_key)
+
+        rate = Rate.objects.get(
+            base_currency=self.base_currency, target_currency=self.usd
+        )
+        rate.rate = Decimal("0.9100")
+        rate.timestamp = timezone.now()
+        rate.save(update_fields=["rate", "timestamp"])
+
+        cached = cache.get(cache_key)
+        self.assertIsNotNone(cached)
+        self.assertEqual(cached["rate"], Decimal("0.9100"))
+        self.assertIn("update_timestamp", cached)

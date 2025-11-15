@@ -155,16 +155,16 @@ def fetch_latest_exchange_rates(self):
                 },
             )
 
-            # Also update cache
-            cache_payload = {
-                "rate": rate_instance.rate,
-                "timestamp": rate_instance.timestamp,
-                "update_timestamp": rate_instance.update_timestamp,
-            }
-            cache.set(
-                f"rate_{base_currency.currency_code}_{target_currency.currency_code}",
-                cache_payload,
-                settings.EXCHANGE_RATES_EXPIRY_SECONDS,
+
+            logger.info(
+                "Rate updated",
+                extra={
+                    "event": "rate.updated",
+                    "base_currency": base_currency.currency_code,
+                    "target_currency": target_currency.currency_code,
+                    "rate": str(rate_instance.rate),
+                    "timestamp": rate_instance.timestamp.isoformat(),
+                },
             )
 
     logger.info(
