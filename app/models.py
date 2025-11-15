@@ -24,6 +24,10 @@ class Rate(models.Model):
     )
     rate = models.DecimalField(max_digits=10, decimal_places=4)
     timestamp = models.DateTimeField()
+    update_timestamp = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-update_timestamp", "-timestamp"]
 
 
 class Quote(models.Model):

@@ -1,10 +1,13 @@
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Union
+from typing import Optional, Union
 
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 
 from app.models import Currency, Rate
+# from app.tasks import fetch_latest_exchange_rates
 
 """Currency conversion helpers backed by the stored exchange rates."""
 
@@ -25,24 +28,104 @@ def _quantize_rate(value: Decimal) -> Decimal:
     return value.quantize(exponent, rounding=ROUND_HALF_UP)
 
 
+def _normalize_rate_payload(raw: Optional[dict]) -> Optional[dict]:
+    """Convert cached/db rate payloads into a sanitized dict with Decimal rate and aware timestamp."""
+    if not isinstance(raw, dict):
+        return None
+
+    rate_value = raw.get("rate")
+    timestamp_value = raw.get("timestamp")
+    update_timestamp_value = raw.get("update_timestamp")
+    if rate_value is None or timestamp_value is None:
+        return None
+    if update_timestamp_value is None:
+        update_timestamp_value = timestamp_value
+
+    try:
+        rate_decimal = (
+            rate_value if isinstance(rate_value, Decimal) else Decimal(str(rate_value))
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+    if isinstance(timestamp_value, (int, float)):
+        timestamp = datetime.fromtimestamp(int(timestamp_value), tz=dt_timezone.utc)
+    elif isinstance(timestamp_value, str):
+        try:
+            timestamp = datetime.fromisoformat(timestamp_value)
+        except ValueError:
+            return None
+    else:
+        timestamp = timestamp_value
+
+    if isinstance(timestamp, datetime):
+        if timezone.is_naive(timestamp):
+            timestamp = timezone.make_aware(timestamp)
+    else:
+        return None
+
+    if isinstance(update_timestamp_value, (int, float)):
+        update_timestamp = datetime.fromtimestamp(int(update_timestamp_value), tz=dt_timezone.utc)
+    elif isinstance(update_timestamp_value, str):
+        try:
+            update_timestamp = datetime.fromisoformat(update_timestamp_value)
+        except ValueError:
+            return None
+    else:
+        update_timestamp = update_timestamp_value
+
+    if isinstance(update_timestamp, datetime):
+        if timezone.is_naive(update_timestamp):
+            update_timestamp = timezone.make_aware(update_timestamp)
+    else:
+        return None
+
+    return {"rate": rate_decimal, "timestamp": timestamp, "update_timestamp": update_timestamp}
+
+
+def _ensure_rate_fresh(
+    rate_payload: dict, base_currency: Currency, target_currency: Currency
+) -> dict:
+    """Validate that a rate payload is within the freshness window, raising if stale."""
+    cutoff = timezone.now() - timedelta(seconds=settings.EXCHANGE_RATES_EXPIRY_SECONDS)
+    if rate_payload["update_timestamp"] < cutoff:
+        raise ValueError(
+            f"Exchange rate between '{base_currency.currency_code}' and "
+            f"'{target_currency.currency_code}' is stale."
+        )
+    return rate_payload
+
+
 def _latest_rate(base_currency: Currency, target_currency: Currency):
-    """Fetch the most recent rate between two currencies, if available."""
-    # Check cache first.
+    """Fetch the most recent rate between two currencies, enforcing freshness."""
     cache_key = f"rate_{base_currency.currency_code}_{target_currency.currency_code}"
-    payload = cache.get(cache_key)
-    if payload:
-        return payload
+    raw_cache = cache.get(cache_key)
+    cached_payload = _normalize_rate_payload(raw_cache)
+    if cached_payload:
+        try:
+            return _ensure_rate_fresh(cached_payload, base_currency, target_currency)
+        except ValueError:
+            cache.delete(cache_key)
+            raise
+    elif raw_cache is not None:
+        cache.delete(cache_key)
 
     rate = (
         Rate.objects.filter(
             base_currency=base_currency, target_currency=target_currency
         )
-        .order_by("-timestamp")
+        .order_by("-update_timestamp", "-timestamp")
         .first()
     )
     if not rate:
         return None
-    payload = {"rate": rate.rate, "timestamp": rate.timestamp}
+
+    payload = {
+        "rate": rate.rate,
+        "timestamp": rate.timestamp,
+        "update_timestamp": rate.update_timestamp,
+    }
+    payload = _ensure_rate_fresh(payload, base_currency, target_currency)
 
     cache.set(cache_key, payload, settings.EXCHANGE_RATES_EXPIRY_SECONDS)
 

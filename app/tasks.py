@@ -146,7 +146,7 @@ def fetch_latest_exchange_rates(self):
 
             target_currency = target_currency_map[currency_code]
 
-            Rate.objects.update_or_create(
+            rate_instance, _ = Rate.objects.update_or_create(
                 base_currency=base_currency,
                 target_currency=target_currency,
                 defaults={
@@ -156,9 +156,14 @@ def fetch_latest_exchange_rates(self):
             )
 
             # Also update cache
+            cache_payload = {
+                "rate": rate_instance.rate,
+                "timestamp": rate_instance.timestamp,
+                "update_timestamp": rate_instance.update_timestamp,
+            }
             cache.set(
                 f"rate_{base_currency.currency_code}_{target_currency.currency_code}",
-                payload,
+                cache_payload,
                 settings.EXCHANGE_RATES_EXPIRY_SECONDS,
             )
 
