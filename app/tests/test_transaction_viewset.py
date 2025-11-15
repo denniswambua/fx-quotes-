@@ -1,6 +1,8 @@
+import json
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -11,6 +13,7 @@ from app.models import Currency, Quote, Transaction
 
 class TransactionViewSetTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.from_currency = Currency.objects.create(
             currency_code="USD", currency_name="US Dollar", decimal_places=2
         )
@@ -28,6 +31,11 @@ class TransactionViewSetTests(APITestCase):
     def _detail_url(self, pk: int) -> str:
         return reverse("transaction-detail", args=[pk])
 
+    def _json(self, response):
+        if hasattr(response, "data"):
+            return response.data
+        return json.loads(response.content)
+
     def test_create_transaction(self):
         payload = {
             "quote": self.quote.pk,
@@ -35,10 +43,16 @@ class TransactionViewSetTests(APITestCase):
         }
 
         with self.assertLogs("app.serializers", level="INFO") as captured:
-            response = self.client.post(self.list_url, payload, format="json")
+            response = self.client.post(
+                self.list_url,
+                payload,
+                format="json",
+                HTTP_IDEMPOTENCY_KEY="txn-create-1",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(Transaction.objects.filter(pk=response.data["id"]).exists())
+        body = self._json(response)
+        self.assertTrue(Transaction.objects.filter(pk=body["id"]).exists())
         self.assertTrue(
             any("Transaction created" in message for message in captured.output)
         )
@@ -103,11 +117,17 @@ class TransactionViewSetTests(APITestCase):
         }
 
         with self.assertLogs("app.serializers", level="WARNING") as captured:
-            response = self.client.post(self.list_url, payload, format="json")
+            response = self.client.post(
+                self.list_url,
+                payload,
+                format="json",
+                HTTP_IDEMPOTENCY_KEY="txn-expired",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("quote", response.data)
-        self.assertEqual(response.data["quote"][0], "Quote has expired.")
+        body = self._json(response)
+        self.assertIn("quote", body)
+        self.assertEqual(body["quote"][0], "Quote has expired.")
         self.assertTrue(
             any("Attempted transaction on expired quote" in message for message in captured.output)
         )
@@ -118,25 +138,97 @@ class TransactionViewSetTests(APITestCase):
             "amount": "150.0000",
         }
 
-        response = self.client.post(self.list_url, payload, format="json")
+        response = self.client.post(
+            self.list_url,
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY="txn-mismatch",
+        )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("amount", response.data)
+        body = self._json(response)
+        self.assertIn("amount", body)
         self.assertEqual(
-            response.data["amount"][0],
+            body["amount"][0],
             "Transaction amount must match the original quoted amount.",
         )
 
     def test_create_duplicate_transaction(self):
         payload = {"quote": self.quote.pk, "amount": 100.00}
-        response = self.client.post(self.list_url, payload, format="json")
+        with self.assertLogs("app.serializers", level="INFO") as captured:
+            response = self.client.post(
+                self.list_url,
+                payload,
+                format="json",
+                HTTP_IDEMPOTENCY_KEY="txn-dup",
+            )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(Transaction.objects.filter(pk=response.data["id"]).exists())
-        with self.assertLogs("app.serializers", level="WARNING") as captured:
-            response = self.client.post(self.list_url, payload, format="json")
+        self.assertTrue(Transaction.objects.filter(pk=self._json(response)["id"]).exists())
+        self.assertTrue(
+            any("Transaction created" in message for message in captured.output)
+        )
+
+        cached_response = self.client.post(
+            self.list_url,
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY="txn-dup",
+        )
+
+        self.assertEqual(cached_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self._json(cached_response), self._json(response))
+
+        with self.assertLogs("app.serializers", level="WARNING") as duplicate_logs:
+            duplicate_response = self.client.post(
+                self.list_url,
+                payload,
+                format="json",
+                HTTP_IDEMPOTENCY_KEY="txn-dup-second",
+            )
+
+        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
+        duplicate_body = self._json(duplicate_response)
+        self.assertIn("non_field_errors", duplicate_body)
+        self.assertTrue(
+            any("Duplicate transaction detected" in message for message in duplicate_logs.output)
+        )
+
+    def test_create_transaction_requires_idempotency_header(self):
+        payload = {
+            "quote": self.quote.pk,
+            "amount": "100.0000",
+        }
+
+        response = self.client.post(self.list_url, payload, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("non_field_errors", response.data)
-        self.assertTrue(
-            any("Duplicate transaction detected" in message for message in captured.output)
+        self.assertEqual(self._json(response)["error"], "Idempotency-Key header required")
+
+    def test_create_transaction_returns_cached_response_for_same_key(self):
+        payload = {
+            "quote": self.quote.pk,
+            "amount": "100.0000",
+        }
+
+        key = "txn-idempotent-key"
+        first = self.client.post(
+            self.list_url,
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY=key,
         )
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        first_body = self._json(first)
+        initial_count = Transaction.objects.count()
+
+        second = self.client.post(
+            self.list_url,
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY=key,
+        )
+
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self._json(second), first_body)
+        self.assertEqual(Transaction.objects.count(), initial_count)
