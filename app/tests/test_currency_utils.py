@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone
 
@@ -10,6 +11,7 @@ from app.utils import convert_currency
 
 class CurrencyConversionUtilsTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.base_code = settings.EXCHANGE_RATES_BASE_CURRENCY.upper()
         self.base_currency = Currency.objects.create(
             currency_code=self.base_code,

@@ -3,10 +3,11 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 
 from app.models import Currency, Rate
-from app.tasks import fetch_latest_exchange_rates
+from app.tasks import _deserialize_timestamp, fetch_latest_exchange_rates
 
 
 class FetchLatestExchangeRatesTaskTests(TestCase):
@@ -58,3 +59,27 @@ class FetchLatestExchangeRatesTaskTests(TestCase):
         self.assertFalse(
             Rate.objects.filter(target_currency__currency_code="JPY").exists()
         )
+
+
+class DeserializeTimestampTests(SimpleTestCase):
+    def test_returns_aware_datetime_from_epoch_timestamp(self):
+        payload = {"timestamp": 1_700_000_000}
+
+        result = _deserialize_timestamp(payload)
+
+        self.assertEqual(result, datetime.fromtimestamp(1_700_000_000, tz=dt_timezone.utc))
+
+    def test_parses_date_string_when_timestamp_missing(self):
+        payload = {"date": "2025-11-15"}
+
+        result = _deserialize_timestamp(payload)
+
+        expected = timezone.make_aware(datetime(2025, 11, 15))
+        self.assertEqual(result, expected)
+
+    def test_falls_back_to_current_time(self):
+        fallback = timezone.make_aware(datetime(2025, 1, 1, 12, 0, 0))
+        with patch("app.tasks.timezone.now", return_value=fallback):
+            result = _deserialize_timestamp({})
+
+        self.assertEqual(result, fallback)

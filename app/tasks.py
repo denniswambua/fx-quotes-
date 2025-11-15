@@ -11,6 +11,7 @@ from celery import shared_task
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.core.cache import cache
 
 from app.models import Currency, Rate
 
@@ -37,6 +38,7 @@ def _build_request_url(base_currency: str, target_currency_codes: List[str]) -> 
 
 
 def _deserialize_timestamp(payload: Dict) -> datetime:
+    """Parse provider payload timestamps into aware datetimes, defaulting to now."""
     timestamp_value = payload.get("timestamp")
     if timestamp_value is not None:
         return datetime.fromtimestamp(int(timestamp_value), tz=dt_timezone.utc)
@@ -151,6 +153,13 @@ def fetch_latest_exchange_rates(self):
                     "rate": rate_decimal,
                     "timestamp": fetched_at,
                 },
+            )
+
+            # Also update cache
+            cache.set(
+                f"rate_{base_currency.currency_code}_{target_currency.currency_code}",
+                payload,
+                settings.EXCHANGE_RATES_EXPIRY_SECONDS,
             )
 
     logger.info(

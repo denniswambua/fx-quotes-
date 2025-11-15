@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Union
 
 from django.conf import settings
+from django.core.cache import cache
 
 from app.models import Currency, Rate
 
@@ -26,11 +27,26 @@ def _quantize_rate(value: Decimal) -> Decimal:
 
 def _latest_rate(base_currency: Currency, target_currency: Currency):
     """Fetch the most recent rate between two currencies, if available."""
-    return (
-        Rate.objects.filter(base_currency=base_currency, target_currency=target_currency)
+    # Check cache first.
+    cache_key = f"rate_{base_currency.currency_code}_{target_currency.currency_code}"
+    payload = cache.get(cache_key)
+    if payload:
+        return payload
+
+    rate = (
+        Rate.objects.filter(
+            base_currency=base_currency, target_currency=target_currency
+        )
         .order_by("-timestamp")
         .first()
     )
+    if not rate:
+        return None
+    payload = {"rate": rate.rate, "timestamp": rate.timestamp}
+
+    cache.set(cache_key, payload, settings.EXCHANGE_RATES_EXPIRY_SECONDS)
+
+    return payload
 
 
 def convert_currency(
@@ -70,22 +86,22 @@ def convert_currency(
 
     direct_rate = _latest_rate(from_currency, to_currency)
     if direct_rate:
-        converted = amount_decimal * direct_rate.rate
+        converted = amount_decimal * direct_rate["rate"]
         quantized = _quantize(converted, to_currency.decimal_places)
         if return_rate:
-            return quantized, _quantize_rate(direct_rate.rate)
+            return quantized, _quantize_rate(direct_rate["rate"])
         return quantized
 
     inverse_rate = _latest_rate(to_currency, from_currency)
     if inverse_rate:
-        if inverse_rate.rate == 0:
+        if inverse_rate["rate"] == 0:
             raise ValueError(
                 f"Rate between '{from_code}' and '{to_code}' is zero; cannot convert"
             )
-        converted = amount_decimal / inverse_rate.rate
+        converted = amount_decimal / inverse_rate["rate"]
         quantized = _quantize(converted, to_currency.decimal_places)
         if return_rate:
-            inverse_value = Decimal("1") / inverse_rate.rate
+            inverse_value = Decimal("1") / inverse_rate["rate"]
             return quantized, _quantize_rate(inverse_value)
         return quantized
 
@@ -102,11 +118,11 @@ def convert_currency(
     effective_rate = Decimal("1")
     if from_currency != base_currency:
         base_to_from = _latest_rate(base_currency, from_currency)
-        if not base_to_from or base_to_from.rate == 0:
+        if not base_to_from or base_to_from["rate"] == 0:
             raise ValueError(
                 f"Missing rate to convert '{from_code}' to base currency '{base_code}'"
             )
-        rate_to_base = Decimal("1") / base_to_from.rate
+        rate_to_base = Decimal("1") / base_to_from["rate"]
         amount_in_base = amount_decimal * rate_to_base
         effective_rate = rate_to_base
 
@@ -122,9 +138,9 @@ def convert_currency(
             f"Missing rate to convert base currency '{base_code}' to '{to_code}'"
         )
 
-    converted = amount_in_base * base_to_target.rate
+    converted = amount_in_base * base_to_target["rate"]
     quantized = _quantize(converted, to_currency.decimal_places)
     if return_rate:
-        total_rate = effective_rate * base_to_target.rate
+        total_rate = effective_rate * base_to_target["rate"]
         return quantized, _quantize_rate(total_rate)
     return quantized

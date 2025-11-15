@@ -52,7 +52,8 @@ class TransactionViewSetTests(APITestCase):
         response = self.client.get(self.list_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_retrieve_transaction(self):
         transaction = Transaction.objects.create(quote=self.quote, amount="100.0000")

@@ -106,7 +106,7 @@ CACHES = {
 }
 
 CACHE_MIDDLEWARE_ALIAS = "default"
-CACHE_MIDDLEWARE_SECONDS = 60 * 60  # 1 hour
+CACHE_MIDDLEWARE_SECONDS = 60 * 30  # 30 minutes
 CACHE_MIDDLEWARE_KEY_PREFIX = "django_project"
 
 
@@ -167,6 +167,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "app.tasks.fetch_latest_exchange_rates",
         "schedule": crontab(minute="*/30"),
     }
+}
+
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 100,
 }
 
 

@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -58,6 +59,7 @@ class QuoteViewSetTests(APITestCase):
     def test_create_quote_without_available_rate(self):
         Rate.objects.all().delete()
 
+        cache.clear()
         payload = {
             "from_currency": self.from_currency.currency_code,
             "to_currency": self.to_currency.currency_code,
@@ -88,7 +90,25 @@ class QuoteViewSetTests(APITestCase):
         response = self.client.get(self.list_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_list_quotes_with_pagination(self):
+        for index in range(5):
+            Quote.objects.create(
+                from_currency=self.from_currency,
+                to_currency=self.to_currency,
+                converted_amount=f"{100 + index}.0000",
+                amount=f"{100 + index}.0000",
+            )
+
+        response = self.client.get(self.list_url, {"limit": 2, "offset": 1})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 5)
+        self.assertEqual(len(response.data["results"]), 2)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNotNone(response.data["previous"])
 
     def test_retrieve_quote(self):
         quote = Quote.objects.create(
