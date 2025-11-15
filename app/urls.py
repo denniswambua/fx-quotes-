@@ -16,6 +16,7 @@ Including another URLconf
 """
 
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path
 
 from rest_framework import routers
@@ -30,6 +31,11 @@ router.register(r"api/transactions", TransactionViewSet)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path(
+        "health/",
+        lambda request: JsonResponse({"status": "ok"}, status=200),
+        name="health-check",
+    ),
 ]
 
 urlpatterns += router.urls

@@ -61,6 +61,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "app.middleware.StructuredLoggingMiddleware",
 ]
 
 ROOT_URLCONF = "app.urls"
@@ -184,3 +185,48 @@ EXCHANGE_RATES_API_URL = env.str(
 EXCHANGE_RATES_API_KEY = env.str("EXCHANGE_RATES_API_KEY", default="")
 EXCHANGE_RATES_BASE_CURRENCY = env.str("EXCHANGE_RATES_BASE_CURRENCY", default="EUR")
 EXCHANGE_RATES_API_TIMEOUT = env.float("EXCHANGE_RATES_API_TIMEOUT", default=10.0)
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        },
+        "json": {
+            "format": "%(message)s"
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+        "json_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        },
+    },
+    "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+        "app.request": {
+            "handlers": ["json_console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "app.serializers": {
+            "handlers": ["json_console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "app.tasks": {
+            "handlers": ["json_console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
