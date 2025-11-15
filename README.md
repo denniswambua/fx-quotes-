@@ -57,6 +57,7 @@ docker-compose exec web uv run manage.py loaddata app/fixture/currencies.json
 ```
 
 ## Design approach and key decisions
+<img width="774" height="670" alt="fx-quotes drawio" src="https://github.com/user-attachments/assets/92391e31-2008-41b8-846e-81025d792edf" />
 ### High-level system design
 - **API Layer (Django REST Framework):** Exposes `/api/currencies`, `/api/rates`, `/api/quotes`, and `/api/transactions` endpoints; request validation and serialization handled by DRF viewsets/serializers.
 - **Persistence:** PostgreSQL (or SQLite for local development) stores core domain models—`Currency`, `Rate`, `Quote`, and `Transaction`—providing transactional consistency.
