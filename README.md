@@ -248,5 +248,4 @@ curl -X POST "http://localhost:8000/api/transactions/" \
 
 ## Assumptions
 - Consumers provide valid ISO 4217 currency codes.
-- Downstream systems store and enforce quote expiries based on the timestamp supplied by this service.
 - Network access to the third-party exchange rates API is stable in the target deployment environments.
