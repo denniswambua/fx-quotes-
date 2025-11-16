@@ -1,78 +1,147 @@
 # FX-Quotes
-Foreign exchange micro service in python/django.
 
-Supports the following currencies:
-- USD
-- EUR
-- KES
-- NGN
+FX-Quotes is a Django-based foreign exchange microservice that fetches, caches, and serves currency rates while enforcing idempotent quote and transaction flows.
 
-## Setup and running
-### Define your environment variable in .env
+## Table of contents
+- [Project overview](#project-overview)
+- [Architecture summary](#architecture-summary)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Configuration](#configuration)
+- [Local development workflow](#local-development-workflow)
+- [Background workers and scheduling](#background-workers-and-scheduling)
+- [Database seeding](#database-seeding)
+- [Running tests](#running-tests)
+- [Containerised setup](#containerised-setup)
+- [API surface](#api-surface)
+- [Operations and handover notes](#operations-and-handover-notes)
+- [Known limitations](#known-limitations)
+- [Assumptions](#assumptions)
 
-```
+## Project overview
+- Provides RESTful endpoints for managing currencies, exchange rates, quotes, and settlements.
+- Enforces idempotency on write operations via `Idempotency-Key` headers.
+- Currently ships with support for USD, EUR, KES, and NGN.
+- Periodically refreshes rates from the configured third-party FX provider and caches results for low-latency quote generation.
+
+## Architecture summary
+
+<img width="774" height="670" alt="fx-quotes drawio" src="https://github.com/user-attachments/assets/92391e31-2008-41b8-846e-81025d792edf" />
+
+- **API layer (Django REST Framework):** Exposes `/api/currencies`, `/api/rates`, `/api/quotes`, and `/api/transactions` with request validation and response serialization.
+- **Persistence:** PostgreSQL (or SQLite for local development) stores the core domain models (`Currency`, `Rate`, `Quote`, `Transaction`).
+- **Caching & messaging:** Redis caches exchange rates and acts as the Celery broker/result backend.
+- **Background processing:** Celery beat triggers `fetch_latest_exchange_rates`, which ingests third-party data, normalizes values, and upserts the latest rates.
+- **External integration:** A configurable Exchange Rates API supplies authoritative pricing; requests are retried with backoff and cached to protect the upstream service.
+
+## Tech stack
+- Python 3.13
+- Django 5 + Django REST Framework 3
+- Celery 5 with Redis broker/result backend
+- PostgreSQL 17 (SQLite supported for quick local runs)
+- `uv` for dependency management and virtual environments
+- Docker + Docker Compose (optional, recommended for parity)
+
+## Prerequisites
+- Python 3.13 with `uv` installed (`pip install uv` or follow [https://docs.astral.sh/uv/](https://docs.astral.sh/uv/)).
+- Access to PostgreSQL (local or container) and Redis if running services outside Docker.
+- Docker Engine and Docker Compose v2 for the containerised workflow.
+
+## Configuration
+Create a `.env` file in the repository root (Docker Compose already reads from it). Adjust hosts and credentials to mirror your environment:
+
+```env
 DEBUG=True
-SECRET_KEY={define a very random secret}
+SECRET_KEY="replace-with-a-random-string"
 ALLOWED_HOSTS=localhost,127.0.0.1
 SQL_ENGINE=django.db.backends.postgresql
 SQL_USER=dev_user
 SQL_PASSWORD=dev_password
 SQL_DATABASE=dev_db
-SQL_HOST=db
+SQL_HOST=localhost
 SQL_PORT=5432
-EXCHANGE_RATES_API_URL=http://api.exchangeratesapi.io/v1/latest
-EXCHANGE_RATES_API_KEY={valid api key please}
-```
-### Requirements
-- python3.13
-- uv 
-- docker (Optional)
-
-On the project root,
-```
-uv venv .venv
-uv sync 
-uv run manage.py migrate 
-uv run manage.py loaddata app/fixture/currencies.json
-uv rum manage.py runserver
+EXCHANGE_RATES_API_URL=https://api.exchangeratesapi.io/v1/latest
+EXCHANGE_RATES_API_KEY=replace-with-valid-api-key
+REDIS_URL=redis://localhost:6379/0
 ```
 
-### Using Docker 
+> When running inside Docker Compose, `SQL_HOST` should be `db` and `REDIS_URL` should target the `cache` service (`redis://cache:6379/0`).
 
+## Local development workflow
+1. Create and activate the virtual environment using `uv`:
+   ```bash
+   uv venv .venv
+   source .venv/bin/activate
+   ```
+2. Install dependencies and sync the locked versions:
+   ```bash
+   uv sync
+   ```
+3. Apply database migrations:
+   ```bash
+   uv run manage.py migrate
+   ```
+4. Seed reference data (see [Database seeding](#database-seeding)).
+5. Start the development server:
+   ```bash
+   uv run manage.py runserver 0.0.0.0:8000
+   ```
+
+## Background workers and scheduling
+Run the Celery worker and beat scheduler in separate terminals to enable rate refreshes and asynchronous processing:
+
+```bash
+# Terminal 1
+uv run celery -A app worker --loglevel=info
+
+# Terminal 2
+uv run celery -A app beat --loglevel=info
 ```
-docker-compose up --build
+
+Both commands rely on Redis (`REDIS_URL`) being available.
+
+## Database seeding
+Load the supported currencies fixture after migrations:
+
+```bash
+uv run manage.py loaddata app/fixtures/currencies.json
 ```
 
-On another shell run to setup the database.
+Re-run the command whenever you need to reset or extend the reference data.
 
-```
-docker-compose exec web uv run manage.py migrate
-docker-compose exec web uv run manage.py loaddata app/fixture/currencies.json
-```
+## Running tests
+Execute the Django test suite (includes DRF endpoint coverage and Celery task tests):
 
-Next, load the supported currencies
-
-```
-docker-compose exec web uv run manage.py loaddata app/fixture/currencies.json
+```bash
+uv run manage.py test
 ```
 
-## Design approach and key decisions
+Use `coverage run -m manage.py test` if you need coverage metrics.
 
-<img width="774" height="670" alt="fx-quotes drawio" src="https://github.com/user-attachments/assets/92391e31-2008-41b8-846e-81025d792edf" />
+## Containerised setup
 
-### High-level system design
-- **API Layer (Django REST Framework):** Exposes `/api/currencies`, `/api/rates`, `/api/quotes`, and `/api/transactions` endpoints; request validation and serialization handled by DRF viewsets/serializers.
-- **Persistence:** PostgreSQL (or SQLite for local development) stores core domain models—`Currency`, `Rate`, `Quote`, and `Transaction`—providing transactional consistency.
-- **Caching & Messaging:** Redis powers result caching for exchange rates and acts as the Celery broker/result backend to decouple background processing from request handling.
-- **Background Processing (Celery):** A Celery beat scheduler triggers `fetch_latest_exchange_rates`, which calls the third-party FX provider, normalizes responses, and upserts the latest `Rate` records.
-- **External Integrations:** Exchange rates API supplies authoritative pricing; responses are retried with exponential backoff and cached for fast quote generation.
-- **Data Flow Example:**
-  1. Client submits `POST /api/quotes` with currencies and amount.
-  2. Service fetches the appropriate `Rate` (from cache, falling back to DB) or derives it via base-currency conversion.
-  3. Quote is persisted with expiry metadata and returned to the client along with computed `converted_amount`.
-  4. Downstream clients confirm settlement through `POST /api/transactions`, enforcing quote validity and amount parity.
+### Docker Compose
+```bash
+docker compose up --build
+```
 
-### API endpoints
+Once the services are healthy, run migrations and seed data from another terminal:
+
+```bash
+docker compose exec web uv run manage.py migrate
+docker compose exec web uv run manage.py loaddata app/fixtures/currencies.json
+```
+
+Celery worker and beat services are built into the Compose stack and start automatically when Redis and the database are available.
+
+### Local Docker helper
+`run.sh` builds the Docker image and starts a container that mounts your working directory for rapid iteration:
+
+```bash
+./run.sh uv run manage.py runserver 0.0.0.0:8000
+```
+
+## API surface
 | Endpoint | Methods | Description | Notes |
 | --- | --- | --- | --- |
 | `/health/` | `GET` | Liveness check returning `{ "status": "ok" }`. | - |
@@ -80,12 +149,12 @@ docker-compose exec web uv run manage.py loaddata app/fixture/currencies.json
 | `/api/currencies/{code}/` | `GET` | Retrieve a single currency by code. | - |
 | `/api/rates/` | `GET` | List latest exchange rates. | Paginated. |
 | `/api/rates/{id}/` | `GET` | Retrieve a specific rate record. | - |
-| `/api/quotes/` | `GET`, `POST` | List quotes or create a new quote. | `POST` requires `Idempotency-Key` header; response includes rate, converted amount, and expiry. |
+| `/api/quotes/` | `GET`, `POST` | List quotes or create a new quote. | `POST` requires `Idempotency-Key`; response returns rate, converted amount, and expiry. |
 | `/api/quotes/{id}/` | `GET` | Retrieve a quote. | - |
 | `/api/transactions/` | `GET`, `POST` | List transactions or create one from a quote. | `POST` requires `Idempotency-Key`; validates quote expiry, amount parity, and duplicate submissions. |
 | `/api/transactions/{id}/` | `GET` | Retrieve a transaction. | - |
 
-#### Example requests
+### Example requests
 
 **Fetch rates**
 
@@ -93,8 +162,6 @@ docker-compose exec web uv run manage.py loaddata app/fixture/currencies.json
 curl -X GET "http://localhost:8000/api/rates/?limit=2" \
      -H "Accept: application/json"
 ```
-
-Sample response:
 
 ```json
 {
@@ -133,8 +200,6 @@ curl -X POST "http://localhost:8000/api/quotes/" \
          }'
 ```
 
-Sample response:
-
 ```json
 {
   "id": 77,
@@ -160,8 +225,6 @@ curl -X POST "http://localhost:8000/api/transactions/" \
          }'
 ```
 
-Sample response:
-
 ```json
 {
   "id": 211,
@@ -171,6 +234,19 @@ Sample response:
 }
 ```
 
+## Operations and handover notes
+- **Secrets management:** Rotate `SECRET_KEY` and external API keys per environment. Avoid committing `.env` files.
+- **Migrations:** Run `uv run manage.py migrate` (or the Docker equivalent) before each deployment.
+- **Scheduled jobs:** Ensure Celery beat is running; the default schedule lives in `app/tasks.py` and expects Redis availability.
+- **Monitoring & logging:** Django logs requests to stdout, Celery logs to stdout as well—ship these to your logging solution in production.
+- **Scale-out considerations:** The application is stateless; scale the web and worker containers horizontally once Redis and PostgreSQL are sized appropriately.
+
 ## Known limitations
-- No historical rate data
-## Any assumptions you made
+- Historical exchange rates are not exposed; only the latest rates are stored and served.
+- Transactions are processed synchronously; introducing asynchronous settlement and queue-based retries is a recommended next step.
+- Rate ingestion depends on a single upstream provider; add redundancy for higher availability.
+
+## Assumptions
+- Consumers provide valid ISO 4217 currency codes.
+- Downstream systems store and enforce quote expiries based on the timestamp supplied by this service.
+- Network access to the third-party exchange rates API is stable in the target deployment environments.
