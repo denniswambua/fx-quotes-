@@ -245,6 +245,7 @@ curl -X POST "http://localhost:8000/api/transactions/" \
 - Historical exchange rates are not exposed; only the latest rates are stored and served.
 - Transactions are processed synchronously; introducing asynchronous settlement and queue-based retries is a recommended next step.
 - Rate ingestion depends on a single upstream provider; add redundancy for higher availability.
+- WGI server like gunicorn has not been done.
 
 ## Assumptions
 - Consumers provide valid ISO 4217 currency codes.
